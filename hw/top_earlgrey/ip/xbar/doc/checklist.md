@@ -204,7 +204,7 @@ Documentation | [DESIGN_DELTAS_CAPTURED_IF_ANY][] | N/A         |
 Testbench     | [ALL_TODOS_RESOLVED][]            | Done        |
 Tests         | [X_PROP_ANALYSIS_COMPLETED][]     | Waived      | tool setup in progress
 Regression    | [NIGHTLY_REGRESSION_AT_100][]     | Done        |
-Coverage      | [CODE_COVERAGE_AT_100][]          | Done        |
+Coverage      | [CODE_COVERAGE_AT_100][]          | Done        | [xbar_cov_excl.el][]
 Coverage      | [FUNCTIONAL_COVERAGE_AT_100][]    | Done        |
 Issues        | [NO_ISSUES_PENDING][]             | Done        |
 Code Quality  | [NO_TOOL_WARNINGS_THROWN][]       | Done        | Waived warning due to using 'force' to connect the signal
@@ -221,3 +221,4 @@ Review        | Signoff date                      | Done        | 2019-11-07
 [NO_ISSUES_PENDING]:            {{<relref "/doc/project/checklist.md#no-issues-pending" >}}
 [NO_TOOL_WARNINGS_THROWN]:      {{<relref "/doc/project/checklist.md#no-tool-warnings-thrown" >}}
 [PRE_VERIFIED_SUB_MODULES_V3]:  {{<relref "/doc/project/checklist.md#pre-verified-sub-modules-v3" >}}
+[xbar_cov_excl.el]: https://github.com/weicaiyang/opentitan/blob/6cd55ad23aac96374bfa0bec315b904c6ffbdb8f/hw/ip/tlul/dv/cov/xbar_cov_excl.el
