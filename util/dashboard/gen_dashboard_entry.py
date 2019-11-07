@@ -11,6 +11,7 @@ import re
 import dashboard.dashboard_validate as dashboard_validate
 import logging as log
 import os.path
+import mistletoe as mk
 
 
 def genout(outfile, msg):
@@ -81,7 +82,7 @@ def gen_dashboard_html(hjson_path, outfile):
                     "        <td>&nbsp;</td>\n")
     if 'notes' in obj:
         genout(outfile,
-                    "        <td>" + html.escape(obj['notes']) + "</td>\n")
+                    "        <td>" + mk.markdown(obj['notes']) + "</td>\n")
     else:
         genout(outfile,
                     "        <td>&nbsp;</td>\n")
@@ -109,7 +110,8 @@ def gen_specboard_html(hjson_path, rel_hjson_path, outfile):
     dv_plan_md = re.sub(
         r'/data/', '/doc/',
         re.sub(r'\.prj\.hjson', '_dv_plan.md', str(hjson_path)))
-    design_spec_html = re.sub(r'/data/', '/doc/',
+    design_spec_html = re.sub(
+        r'/data/', '/doc/',
         re.sub(r'\.prj\.hjson', '.html', str(rel_hjson_path)))
     dv_plan_html = re.sub(
         r'/data/', '/doc/',
