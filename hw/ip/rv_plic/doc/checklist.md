@@ -129,7 +129,6 @@ Review        | [V2_CHECKLIST_SCOPED][]               | Done        |
 Review        | Reviewer(s)                           | @eunchan    |
 Review        | Signoff date                          | 2020-02-03  |
 
-
 [DV_PLAN_DRAFT_COMPLETED]:            {{<relref "/doc/project/checklist.md#dv-plan-draft-completed" >}}
 [TESTPLAN_COMPLETED]:                 {{<relref "/doc/project/checklist.md#testplan-completed" >}}
 [TB_TOP_CREATED]:                     {{<relref "/doc/project/checklist.md#tb-top-created" >}}
@@ -169,7 +168,6 @@ Integration   | [PRE_VERIFIED_SUB_MODULES_V2][]         | N/A         |
 Review        | [V3_CHECKLIST_SCOPED][]                 | Done        |
 Review        | Reviewer(s)                             | @eunchan    |
 Review        | Signoff date                            | 2020-02-03  |
-
 
 [DESIGN_DELTAS_CAPTURED_V2]:          {{<relref "/doc/project/checklist.md#design-deltas-captured-v2" >}}
 [DV_PLAN_COMPLETED]:                  {{<relref "/doc/project/checklist.md#dv-plan-completed" >}}
