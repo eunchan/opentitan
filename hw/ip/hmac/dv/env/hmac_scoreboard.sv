@@ -8,7 +8,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
   `uvm_component_utils(hmac_scoreboard)
   `uvm_component_new
 
-  bit             sha_en, fifo_full;
+  bit             sha_en, fifo_full, fifo_empty;
   bit [7:0]       msg_q[$];
   bit             hmac_start, hmac_process;
   int             hmac_wr_cnt, hmac_rd_cnt;
@@ -22,7 +22,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
   task run_phase(uvm_phase phase);
     super.run_phase(phase);
     fork
-      hmac_process_fifo_full();
+      hmac_process_fifo_status();
       hmac_process_fifo_wr();
       hmac_process_fifo_rd();
     join_none
@@ -268,15 +268,17 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
     join
   endtask
 
-  virtual task hmac_process_fifo_full();
+  virtual task hmac_process_fifo_status();
     forever @(hmac_wr_cnt, hmac_rd_cnt) begin
       // when hmac_wr_cnt and hmac_rd_cnt update at the same time, wait 1ps to guarantee
       // get both update
       #1ps;
-      if ((hmac_wr_cnt - hmac_rd_cnt) == HMAC_MSG_FIFO_DEPTH) begin
-        void'(ral.intr_state.fifo_full.predict(.value(1)));
-        `uvm_info(`gfn, "predict interrupt fifo full is set", UVM_HIGH)
-        fifo_full = 1;
+      if ((hmac_wr_cnt == hmac_rd_cnt) && hmac_start) begin
+        // FIFO write/read pointers are same --> FIFO Empty event occurs
+        // Remember the initial status is Empty but the event won't occur
+        void'(ral.intr_state.fifo_empty.predict(.value(1)));
+        `uvm_info(`gfn, "predict interrupt fifo empty is set", UVM_HIGH)
+        fifo_empty = 1;
       end
     end
   endtask
@@ -350,7 +352,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
 
   function void check_phase(uvm_phase phase);
     super.check_phase(phase);
-    `DV_CHECK_EQ(cfg.intr_vif.pins[HmacMsgFifoFull], 1'b0)
+    `DV_CHECK_EQ(cfg.intr_vif.pins[HmacMsgFifoEmpty], 1'b0)
     `DV_CHECK_EQ(cfg.intr_vif.pins[HmacDone], 1'b0)
     `DV_CHECK_EQ(cfg.intr_vif.pins[HmacErr], 1'b0)
   endfunction

@@ -14,7 +14,7 @@ class hmac_sanity_vseq extends hmac_base_vseq;
   rand bit        sha_en;
   rand bit        endian_swap;
   rand bit        digest_swap;
-  rand bit        intr_fifo_full_en;
+  rand bit        intr_fifo_empty_en;
   rand bit        intr_hmac_done_en;
   rand bit        intr_hmac_err_en;
   rand bit [31:0] key[8];
@@ -39,7 +39,7 @@ class hmac_sanity_vseq extends hmac_base_vseq;
   }
 
   constraint intr_enable_c {
-    intr_fifo_full_en dist {1'b1 := 8, 1'b0 := 2};
+    intr_fifo_empty_en dist {1'b1 := 8, 1'b0 := 2};
     intr_hmac_done_en dist {1'b1 := 8, 1'b0 := 2};
     intr_hmac_err_en  dist {1'b1 := 8, 1'b0 := 2};
   }
@@ -60,12 +60,12 @@ class hmac_sanity_vseq extends hmac_base_vseq;
       `DV_CHECK_RANDOMIZE_FATAL(this)
       `uvm_info(`gfn, $sformatf("starting seq %0d/%0d, message size %0d, hmac=%0d, sha=%0d",
                                 i, num_trans, msg.size(), hmac_en, sha_en), UVM_LOW)
-      `uvm_info(`gfn, $sformatf("intr_fifo_full/hmac_done/hmac_err_en=%b, endian/digest_swap=%b",
-                                {intr_fifo_full_en, intr_hmac_done_en, intr_hmac_err_en},
+      `uvm_info(`gfn, $sformatf("intr_fifo_empty/hmac_done/hmac_err_en=%b, endian/digest_swap=%b",
+                                {intr_fifo_empty_en, intr_hmac_done_en, intr_hmac_err_en},
                                 {endian_swap, digest_swap}), UVM_HIGH)
       // initialize hmac configs
       hmac_init(.sha_en(sha_en), .hmac_en(hmac_en), .endian_swap(endian_swap),
-                .digest_swap(digest_swap), .intr_fifo_full_en(intr_fifo_full_en),
+                .digest_swap(digest_swap), .intr_fifo_empty_en(intr_fifo_empty_en),
                 .intr_hmac_done_en(intr_hmac_done_en), .intr_hmac_err_en(intr_hmac_err_en));
 
       // can randomly read previous digest
@@ -78,6 +78,7 @@ class hmac_sanity_vseq extends hmac_base_vseq;
       if (i != 1 && $urandom_range(0, 1)) rd_digest();
 
       if (sha_en || $urandom_range(0, 1)) begin
+        bit [TL_DW-1:0] intr_state_val;
         // start stream in msg
         trigger_hash();
 
@@ -106,16 +107,16 @@ class hmac_sanity_vseq extends hmac_base_vseq;
         // example: current fifo_depth=(14 words + 2 bytes), then wr last 4 bytes, design will
         // process the 15th word then trigger intr_fifo_full
         cfg.clk_rst_vif.wait_clks(2);
-        clear_intr_fifo_full();
+        //clear_intr_fifo_full();
 
         // wait for interrupt to assert, check status and clear it
         if (intr_hmac_done_en) begin
           wait(cfg.intr_vif.pins[HmacDone] === 1'b1);
-          check_interrupts(.interrupts((1 << HmacDone)), .check_set(1'b1));
         end else begin
           csr_spinwait(.ptr(ral.intr_state.hmac_done), .exp_data(1'b1));
-          csr_wr(.csr(ral.intr_state), .value(1 << HmacDone));
         end
+        csr_rd(.ptr(ral.intr_state), .value(intr_state_val));
+        csr_wr(.csr(ral.intr_state), .value(intr_state_val));
       end
 
 
