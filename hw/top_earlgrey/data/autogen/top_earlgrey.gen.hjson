@@ -393,7 +393,7 @@
           type: interrupt
         }
         {
-          name: fifo_full
+          name: fifo_empty
           width: 1
           type: interrupt
         }
@@ -1325,7 +1325,7 @@
       type: interrupt
     }
     {
-      name: hmac_fifo_full
+      name: hmac_fifo_empty
       width: 1
       type: interrupt
     }
