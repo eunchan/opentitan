@@ -273,12 +273,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
       // when hmac_wr_cnt and hmac_rd_cnt update at the same time, wait 1ps to guarantee
       // get both update
       #1ps;
-      //if ((hmac_wr_cnt - hmac_rd_cnt) == HMAC_MSG_FIFO_DEPTH) begin
-      //  void'(ral.intr_state.fifo_full.predict(.value(1)));
-      //  `uvm_info(`gfn, "predict interrupt fifo full is set", UVM_HIGH)
-      //  fifo_full = 1;
-      //end else
-      if (hmac_wr_cnt == hmac_rd_cnt) begin
+      if ((hmac_wr_cnt == hmac_rd_cnt) && hmac_start) begin
         // FIFO write/read pointers are same --> FIFO Empty event occurs
         // Remember the initial status is Empty but the event won't occur
         void'(ral.intr_state.fifo_empty.predict(.value(1)));
@@ -340,9 +335,6 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
               #1ps; // delay 1 ps to make sure did not sample right at negedge clk
               cfg.clk_rst_vif.wait_n_clks(1);
               hmac_rd_cnt++;
-              if (hmac_wr_cnt == hmac_rd_cnt) begin
-                fifo_empty = 1;
-              end
               `uvm_info(`gfn, $sformatf("increase rd cnt %0d", hmac_rd_cnt), UVM_HIGH)
               if (hmac_rd_cnt % HMAC_MSG_FIFO_DEPTH == 0) begin
                 cfg.clk_rst_vif.wait_n_clks(HMAC_MSG_PROCESS_CYCLES);

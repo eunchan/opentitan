@@ -78,6 +78,7 @@ class hmac_sanity_vseq extends hmac_base_vseq;
       if (i != 1 && $urandom_range(0, 1)) rd_digest();
 
       if (sha_en || $urandom_range(0, 1)) begin
+        bit [TL_DW-1:0] intr_state_val;
         // start stream in msg
         trigger_hash();
 
@@ -111,11 +112,11 @@ class hmac_sanity_vseq extends hmac_base_vseq;
         // wait for interrupt to assert, check status and clear it
         if (intr_hmac_done_en) begin
           wait(cfg.intr_vif.pins[HmacDone] === 1'b1);
-          check_interrupts(.interrupts((1 << HmacDone)), .check_set(1'b1));
         end else begin
           csr_spinwait(.ptr(ral.intr_state.hmac_done), .exp_data(1'b1));
-          csr_wr(.csr(ral.intr_state), .value(1 << HmacDone));
         end
+        csr_rd(.ptr(ral.intr_state), .value(intr_state_val));
+        csr_wr(.csr(ral.intr_state), .value(intr_state_val));
       end
 
 
