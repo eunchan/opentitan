@@ -159,3 +159,8 @@ waive -rules {NOT_READ} -location {spi_passthrough.sv} \
 waive -rules {ASSIGN_SIGN NEG_ASSIGN} -location {spi_passthrough.sv} \
       -regexp {'addr_size_d'} \
       -comment "Waive the unsigned, negative value errors for readability"
+
+## latch
+waive -rules {LATCH COMBO_NBA} -location {spi_readcmd.sv} \
+      -regexp {'last_read_address_o'} \
+      -comment "Intentional use of latch. And guideline is to use non-blocking assignment"

@@ -171,6 +171,9 @@ module spi_device
   spi_byte_t   sub_p2s_data[IoModeEnd];
   logic        sub_p2s_sent[IoModeEnd];
 
+  // Read commands related signals
+  logic [31:0] last_read_addr;
+
   // CMD interface
   sel_datapath_e cmd_dp_sel, cmd_dp_sel_outclk;
 
@@ -360,6 +363,9 @@ module spi_device
   assign hw2reg.intr_state.txunderflow.de = intr_fwm_txunderflow |
       (reg2hw.intr_test.txunderflow.qe & reg2hw.intr_test.txunderflow.q);
 
+  // SPI Flash commands registers
+  // TODO: Add 2FF sync? or just waive?
+  assign hw2reg.last_read_addr.d = last_read_addr;
 
   // Passthrough config: value shall be stable while SPI transaction is active
   //assign cmd_filter = reg2hw.cmd_filter.q;
@@ -811,6 +817,8 @@ module spi_device
 
     .sys_rst_ni (rst_ni),
 
+    .csb_i      (cio_csb_i),
+
     .sel_dp_i   (cmd_dp_sel),
 
     // SRAM interface
@@ -844,6 +852,8 @@ module spi_device
     .mailbox_en_i      (1'b 0),
     .mailbox_addr_i    ('0), // 32
     .mailbox_assumed_o (mailbox_assumed),
+
+    .last_read_address_o (last_read_addr),
 
     .io_mode_o (sub_iomode [IoModeReadCmd]),
 
