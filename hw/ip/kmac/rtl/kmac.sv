@@ -84,11 +84,26 @@ module kmac
   } kmac_st_e;
   kmac_st_e kmac_st, kmac_st_d;
 
+  // CFG register struct to handle cfg shadow register
+  typedef struct packed {
+    logic kmac_en;
+    logic [2:0] kstrength;
+    logic [1:0] mode;
+    logic msg_endianness;
+    logic state_endianness;
+    logic sideload;
+    logic [1:0] entropy_mode;
+    logic entropy_fast_process;
+    logic entropy_ready;
+    logic err_processed;
+  } cfg_reg_t;
+
   /////////////
   // Signals //
   /////////////
   kmac_reg2hw_t reg2hw;
   kmac_hw2reg_t hw2reg;
+  cfg_reg_t     cfg_reg_w, cfg_reg_q, cfg_reg_d;
 
   // devmode ties to 1 as KMAC should be operated at the beginning for ROM_CTRL.
   logic devmode;
@@ -250,7 +265,13 @@ module kmac
   // Error checker
   kmac_pkg::err_t errchecker_err;
 
+  // Shadow register update error
+  logic cfg_err_update;
+
   logic err_processed;
+
+  logic alert_fatal;
+  logic alert_intg_err, alert_cfg_err_storage ;
 
   //////////////////////////////////////
   // Connecting Register IF to logics //
@@ -374,12 +395,9 @@ module kmac
                          && reg2hw.cmd.hash_cnt_clr.q;
 
   // Entropy config
-  assign entropy_ready = reg2hw.cfg.entropy_ready.q;
-  assign entropy_mode  = entropy_mode_e'(reg2hw.cfg.entropy_mode.q);
-  assign entropy_fast_process = reg2hw.cfg.entropy_fast_process.q;
-
-  assign hw2reg.cfg.entropy_ready.de = entropy_ready;
-  assign hw2reg.cfg.entropy_ready.d = 1'b 0; // always clear when ready
+  assign entropy_ready = cfg_reg_q.entropy_ready;
+  assign entropy_mode  = entropy_mode_e'(cfg_reg_q.entropy_mode);
+  assign entropy_fast_process = cfg_reg_q.entropy_fast_process;
 
   `ASSERT(EntropyReadyLatched_A, $rose(entropy_ready) |=> !entropy_ready)
 
@@ -396,17 +414,15 @@ module kmac
   end
 
   // Clear the error processed
-  assign err_processed = reg2hw.cfg.err_processed.q;
-  assign hw2reg.cfg.err_processed.de = err_processed;
-  assign hw2reg.cfg.err_processed.d = 1'b 0;
+  assign err_processed = cfg_reg_q.err_processed;
 
   // Make sure the field has latch in reg_top
   `ASSERT(ErrProcessedLatched_A, $rose(err_processed) |=> !err_processed)
 
   // App mode, strength, kmac_en
-  assign reg_kmac_en         = reg2hw.cfg.kmac_en.q;
-  assign reg_sha3_mode       = sha3_pkg::sha3_mode_e'(reg2hw.cfg.mode.q);
-  assign reg_keccak_strength = sha3_pkg::keccak_strength_e'(reg2hw.cfg.kstrength.q);
+  assign reg_kmac_en         = cfg_reg_q.kmac_en;
+  assign reg_sha3_mode       = sha3_pkg::sha3_mode_e'(cfg_reg_q.mode);
+  assign reg_keccak_strength = sha3_pkg::keccak_strength_e'(cfg_reg_q.kstrength);
 
   ///////////////
   // Interrupt //
@@ -455,7 +471,8 @@ module kmac
 
   logic event_error;
   assign event_error = sha3_err.valid    | app_err.valid
-                     | entropy_err.valid | errchecker_err.valid;
+                     | entropy_err.valid | errchecker_err.valid
+                     | cfg_err_update;
 
   // Assing error code to the register
   assign hw2reg.err_code.de = event_error;
@@ -481,6 +498,10 @@ module kmac
 
       entropy_err.valid: begin
         hw2reg.err_code.d = {entropy_err.code, entropy_err.info};
+      end
+
+      cfg_err_update: begin
+        hw2reg.err_code.d = {ErrShadowRegUpdate,24'(KMAC_CFG_SHADOWED_OFFSET) };
       end
 
       default: begin
@@ -678,8 +699,8 @@ module kmac
   //    big-endian, it needs to be swapped to little-endian to maintain the
   //    order. Internal SHA3(Keccak) runs in little-endian in contrast to HMAC
   //    So, no endian-swap after prim_packer.
-  assign tlram_wdata_endian = conv_endian32(tlram_wdata, reg2hw.cfg.msg_endianness.q);
-  assign tlram_wmask_endian = conv_endian32(tlram_wmask, reg2hw.cfg.msg_endianness.q);
+  assign tlram_wdata_endian = conv_endian32(tlram_wdata, cfg_reg_q.msg_endianness);
+  assign tlram_wmask_endian = conv_endian32(tlram_wmask, cfg_reg_q.msg_endianness);
 
   // TL Adapter
   tlul_adapter_sram #(
@@ -777,7 +798,7 @@ module kmac
     .reg_state_o          (reg_state),
 
     // Configuration: Sideloaded Key
-    .keymgr_key_en_i      (reg2hw.cfg.sideload.q),
+    .keymgr_key_en_i      (cfg_reg_q.sideload),
 
     .absorbed_i (sha3_absorbed), // from SHA3
     .absorbed_o (event_absorbed), // to SW
@@ -837,7 +858,7 @@ module kmac
 
     .state_i (reg_state),
 
-    .endian_swap_i (reg2hw.cfg.state_endianness.q)
+    .endian_swap_i (cfg_reg_q.state_endianness)
   );
 
   // Error checker
@@ -983,15 +1004,114 @@ module kmac
 
     .reg2hw,
     .hw2reg,
-    .intg_err_o(alerts[0]),
+    .intg_err_o(alert_intg_err),
     .devmode_i (devmode)
   );
+
+  // Shadow register: CFG
+  // If the instance name is changed, change the tags shadowed_reg_path for
+  // the register in the .hjson
+  logic cfg_re, cfg_we, cfg_de;
+  logic cfg_err_storage_d, cfg_err_storage_q;
+  prim_subreg_shadow #(
+    .DW       ( $bits(cfg_reg_t) ),
+    .SWACCESS ( "WO"             ),
+    .RESVAL   ( '0               )
+  ) u_cfg_reg_shadowed (
+    .clk_i       ( clk_i             ),
+    .rst_ni      ( rst_ni            ),
+    .re          ( cfg_re            ),
+    .we          ( cfg_we            ),
+    .wd          ( cfg_reg_w         ),
+    .de          ( cfg_de            ),
+    .d           ( cfg_reg_d         ),
+    .qe          (                   ),
+    .q           ( cfg_reg_q         ),
+    .qs          (                   ),
+    .err_update  ( cfg_err_update    ),
+    .err_storage ( cfg_err_storage_d )
+  );
+  assign cfg_re = reg2hw.cfg_shadowed.kmac_en.re
+                & reg2hw.cfg_shadowed.kstrength.re
+                & reg2hw.cfg_shadowed.mode.re
+                & reg2hw.cfg_shadowed.msg_endianness.re
+                & reg2hw.cfg_shadowed.state_endianness.re
+                & reg2hw.cfg_shadowed.sideload.re
+                & reg2hw.cfg_shadowed.entropy_mode.re
+                & reg2hw.cfg_shadowed.entropy_fast_process.re
+                & reg2hw.cfg_shadowed.entropy_ready.re
+                & reg2hw.cfg_shadowed.err_processed.re
+                ;
+  // CFG_WEN register write enable is in kmac_reg_top.sv
+  assign cfg_we = reg2hw.cfg_shadowed.kmac_en.qe
+                & reg2hw.cfg_shadowed.kstrength.qe
+                & reg2hw.cfg_shadowed.mode.qe
+                & reg2hw.cfg_shadowed.msg_endianness.qe
+                & reg2hw.cfg_shadowed.state_endianness.qe
+                & reg2hw.cfg_shadowed.sideload.qe
+                & reg2hw.cfg_shadowed.entropy_mode.qe
+                & reg2hw.cfg_shadowed.entropy_fast_process.qe
+                & reg2hw.cfg_shadowed.entropy_ready.qe
+                & reg2hw.cfg_shadowed.err_processed.qe
+                ;
+  assign cfg_reg_w = '{
+    kmac_en:              reg2hw.cfg_shadowed.kmac_en.q,
+    kstrength:            reg2hw.cfg_shadowed.kstrength.q,
+    mode:                 reg2hw.cfg_shadowed.mode.q,
+    msg_endianness:       reg2hw.cfg_shadowed.msg_endianness.q,
+    state_endianness:     reg2hw.cfg_shadowed.state_endianness.q,
+    sideload:             reg2hw.cfg_shadowed.sideload.q,
+    entropy_mode:         reg2hw.cfg_shadowed.entropy_mode.q,
+    entropy_fast_process: reg2hw.cfg_shadowed.entropy_fast_process.q,
+    entropy_ready:        reg2hw.cfg_shadowed.entropy_ready.q,
+    err_processed:        reg2hw.cfg_shadowed.err_processed.q
+  };
+
+  assign cfg_de = cfg_reg_q.err_processed | cfg_reg_q.entropy_ready;
+  assign cfg_reg_d = '{
+    kmac_en:              cfg_reg_q.kmac_en,
+    kstrength:            cfg_reg_q.kstrength,
+    mode:                 cfg_reg_q.mode,
+    msg_endianness:       cfg_reg_q.msg_endianness,
+    state_endianness:     cfg_reg_q.state_endianness,
+    sideload:             cfg_reg_q.sideload,
+    entropy_mode:         cfg_reg_q.entropy_mode,
+    entropy_fast_process: cfg_reg_q.entropy_fast_process,
+    entropy_ready:        1'b 0,
+    err_processed:        1'b 0
+  };
+  assign hw2reg.cfg_shadowed.kmac_en.d              = cfg_reg_q.kmac_en;
+  assign hw2reg.cfg_shadowed.kstrength.d            = cfg_reg_q.kstrength;
+  assign hw2reg.cfg_shadowed.mode.d                 = cfg_reg_q.mode;
+  assign hw2reg.cfg_shadowed.msg_endianness.d       = cfg_reg_q.msg_endianness;
+  assign hw2reg.cfg_shadowed.state_endianness.d     = cfg_reg_q.state_endianness;
+  assign hw2reg.cfg_shadowed.sideload.d             = cfg_reg_q.sideload;
+  assign hw2reg.cfg_shadowed.entropy_mode.d         = cfg_reg_q.entropy_mode;
+  assign hw2reg.cfg_shadowed.entropy_fast_process.d = cfg_reg_q.entropy_fast_process;
+  assign hw2reg.cfg_shadowed.entropy_ready.d        = cfg_reg_q.entropy_ready;
+  assign hw2reg.cfg_shadowed.err_processed.d        = cfg_reg_q.err_processed;
+
+  // Latch cfg_err_storage_d
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)                cfg_err_storage_q <= 1'b 0;
+    else if (cfg_err_storage_d) cfg_err_storage_q <= 1'b 1;
+  end
 
   // Alerts
   assign alert_test = {
     reg2hw.alert_test.q &
     reg2hw.alert_test.qe
   };
+
+  assign alerts = {
+    alert_fatal     // Alerts[0]
+    };
+
+  assign alert_cfg_err_storage = cfg_err_storage_q;
+
+  assign alert_fatal = alert_cfg_err_storage
+                     | alert_intg_err
+                     ;
 
   for (genvar i = 0; i < NumAlerts; i++) begin : gen_alert_tx
     prim_alert_sender #(

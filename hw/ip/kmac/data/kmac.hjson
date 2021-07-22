@@ -125,7 +125,7 @@
              // by software.
              "excl:CsrNonInitTests:CsrExclCheck"]
     } // R : CFG_REGWEN
-    { name: "CFG"
+    { name: "CFG_SHADOWED"
       desc: '''KMAC Configuration register.
 
             This register is  updated when the hashing engine is in Idle.
@@ -134,7 +134,10 @@
             '''
       regwen: "CFG_REGWEN"
       swaccess: "rw"
-      hwaccess: "hro"
+      hwaccess: "hrw"
+      hwext: "true"
+      hwqe:  "true"
+      shadowed: "true"
       fields: [
         { bits: "0"
           name: "kmac_en"
@@ -300,6 +303,10 @@
           tags: [// Randomly write mem will cause this reg updated by design
                  "excl:CsrNonInitTests:CsrExclCheck"]
         } // f: err_processed
+      ]
+      tags: [
+        "excl:CsrNonInitTests:CsrExclWriteCheck",
+        "shadowed_reg_path:u_cfg_reg_shadowed"
       ]
     } // R: CFG
     { name: "CMD"
